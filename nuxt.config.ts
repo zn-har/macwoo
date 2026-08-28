@@ -119,6 +119,7 @@ export default defineNuxtConfig({
     '/portfolio/**': { headers: { 'cache-control': 's-maxage=60, stale-while-revalidate=600' } },
     '/case-studies': { headers: { 'cache-control': 's-maxage=60, stale-while-revalidate=600' } },
     '/case-studies/**': { headers: { 'cache-control': 's-maxage=60, stale-while-revalidate=600' } },
+    '/services': { redirect: { to: '/services/branding-design', statusCode: 301 } },
     '/services/**': { headers: { 'cache-control': 's-maxage=60, stale-while-revalidate=600' } },
     // Admin area is client-rendered SPA. Prerendering the SPA shells ensures
     // Cloudflare Pages serves them directly, avoiding 404s.
