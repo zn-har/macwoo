@@ -14,7 +14,7 @@ useSeoMeta({
   ogDescription: 'Build your future with Macawoo. We are a collection of visionaries, builders, and storytellers. Join us in crafting digital experiences that demand attention and drive transformation.'
 })
 
-const siteUrl = 'https://www.macawoo.co'
+const siteUrl = 'https://macawoo.co'
 useHead({
   script: [
     {

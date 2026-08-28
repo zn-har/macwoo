@@ -13,7 +13,7 @@ useSeoMeta({
   ogDescription: 'Macawoo is a full-service creative and strategic branding agency. We blend raw creative energy with executive-level precision to craft brands that command attention and drive growth.'
 })
 
-const siteUrl = 'https://www.macawoo.co'
+const siteUrl = 'https://macawoo.co'
 useHead({
   script: [
     {
@@ -33,16 +33,10 @@ useHead({
 
 const whoWeAreRef = ref<HTMLElement | null>(null)
 const revealProgress = ref(0)
-const isMobile = ref(false)
+const isMobile = useIsMobile(768)
 
 const revealText = 'We are a creative & strategy agency. We blend raw creative energy with executive-level precision to craft brands that command attention and drive growth.'
 const words = revealText.split(' ')
-
-const checkMobile = () => {
-  if (typeof window !== 'undefined') {
-    isMobile.value = window.innerWidth < 768
-  }
-}
 
 const handleScroll = () => {
   if (!whoWeAreRef.value || isMobile.value) return
@@ -87,14 +81,13 @@ const getWordStyle = (index: number) => {
 }
 
 onMounted(() => {
-  checkMobile()
-  window.addEventListener('resize', checkMobile)
-  window.addEventListener('scroll', handleScroll)
+  // `passive: true` matters here: without it this listener blocked the
+  // compositor on every touch scroll. handleScroll itself bails on mobile.
+  window.addEventListener('scroll', handleScroll, { passive: true })
   handleScroll()
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', checkMobile)
   window.removeEventListener('scroll', handleScroll)
 })
 </script>

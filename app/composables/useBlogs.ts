@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useSupabase } from './useSupabase'
 import { posts as defaultPosts } from '~/data/blog'
 import type { BlogPost } from '~/data/blog'
 
@@ -9,48 +8,63 @@ let activeFetchPromise: Promise<void> | null = null
 const CACHE_TTL = 300000 // 5 minutes
 
 export function useBlogs() {
-  const supabase = useSupabase()
+  const getSupabase = useSupabaseLazy()
   const posts = useState<BlogPost[]>('blogs', () => [])
 
   const fetchBlogs = async () => {
+    // Read through the Nitro endpoint, not Supabase directly: it keeps
+    // `@supabase/supabase-js` out of the browser bundle and lets Cloudflare
+    // edge-cache the response.
+    const load = async () => {
+      const data = await $fetch<BlogPost[]>('/api/public/blogs')
+      if (data) {
+        cachedPosts = data
+        cacheTime = Date.now()
+        posts.value = data
+      }
+    }
+
+    // The module-level memo is CLIENT-ONLY on purpose.
+    //
+    // On the server this module lives in a Cloudflare isolate that is reused
+    // across requests, and a promise created for request A cannot be awaited by
+    // request B — workerd cancels A's pending I/O the moment A's response is
+    // sent, so that promise never settles. Any caller that starts this fetch
+    // without awaiting it (a component rendering its own data, say) would
+    // therefore leave `activeFetchPromise` permanently pending and every later
+    // request would block on it forever. Server-side repetition is absorbed by
+    // the edge cache on /api/public/* instead.
+    if (import.meta.server) {
+      try {
+        await load()
+      } catch (e) {
+        console.error('Error fetching /api/public/blogs:', e)
+      }
+      return
+    }
+
     if (cachedPosts && (Date.now() - cacheTime < CACHE_TTL)) {
       posts.value = cachedPosts
       return
     }
 
     if (activeFetchPromise) {
-      await activeFetchPromise
+      try {
+        await activeFetchPromise
+      } catch {
+        // fall through to a fresh attempt below
+      }
       if (cachedPosts) {
         posts.value = cachedPosts
+        return
       }
-      return
     }
 
     activeFetchPromise = (async () => {
       try {
-        const { data, error } = await supabase
-          .from('blog_posts')
-          .select('*, categories(name)')
-          .order('date', { ascending: false })
-
-        if (error) throw error
-        if (data) {
-          const mappedPosts: BlogPost[] = data.map((d: any) => ({
-            slug: d.slug,
-            title: d.title,
-            excerpt: d.excerpt,
-            date: d.date,
-            readTime: d.read_time,
-            image: d.image,
-            body: (d.body as any) || [],
-            category: d.categories?.name || undefined
-          }))
-          cachedPosts = mappedPosts
-          cacheTime = Date.now()
-          posts.value = mappedPosts
-        }
+        await load()
       } catch (e) {
-        console.error('Error fetching blogs:', e)
+        console.error('Error fetching /api/public/blogs:', e)
       } finally {
         activeFetchPromise = null
       }
@@ -66,6 +80,7 @@ export function useBlogs() {
   }
 
   const resolveCategoryId = async (categoryName: string | undefined): Promise<string | null> => {
+    const supabase = await getSupabase()
     if (!categoryName) return null
     const { data } = await supabase
       .from('categories')
@@ -77,6 +92,7 @@ export function useBlogs() {
   }
 
   const addPost = async (post: BlogPost & { category?: string }) => {
+    const supabase = await getSupabase()
     cachedPosts = null
     cacheTime = 0
     const categoryId = await resolveCategoryId(post.category)
@@ -104,6 +120,7 @@ export function useBlogs() {
   }
 
   const updatePost = async (slug: string, updated: BlogPost & { category?: string }) => {
+    const supabase = await getSupabase()
     cachedPosts = null
     cacheTime = 0
     const categoryId = await resolveCategoryId(updated.category)
@@ -136,6 +153,7 @@ export function useBlogs() {
   }
 
   const deletePost = async (slug: string) => {
+    const supabase = await getSupabase()
     cachedPosts = null
     cacheTime = 0
     try {
@@ -151,6 +169,7 @@ export function useBlogs() {
   }
 
   const resetBlogs = async () => {
+    const supabase = await getSupabase()
     cachedPosts = null
     cacheTime = 0
     try {

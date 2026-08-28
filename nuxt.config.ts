@@ -49,7 +49,7 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
 
   site: {
-    url: process.env.NUXT_PUBLIC_SITE_URL || 'https://www.macawoo.co',
+    url: process.env.NUXT_PUBLIC_SITE_URL || 'https://macawoo.co',
     name: 'Macawoo',
     description: 'Macawoo is a leading creative and strategic branding agency. We blend raw creative energy with executive-level precision to craft brands that command attention and drive growth.',
     defaultLocale: 'en'
@@ -73,6 +73,15 @@ export default defineNuxtConfig({
   },
 
   image: {
+    // NOTE: `provider: 'none'` is the honest description of what actually runs
+    // here. On the cloudflare-pages preset there is no IPX handler (it needs
+    // sharp, which cannot run on Workers), so <NuxtImg> emits the original URL
+    // untouched — `format`, `quality` and `screens` below are inert.
+    //
+    // To make them real, enable Cloudflare image transformations on the zone and
+    // switch to `provider: 'cloudflare'` with `cloudflare: { baseURL: <site url> }`.
+    // Until then, keep source assets pre-optimised.
+    provider: 'none',
     format: ['webp', 'avif', 'png', 'jpg'],
     quality: 80,
     screens: {
@@ -92,6 +101,25 @@ export default defineNuxtConfig({
     '/_nuxt/**': { headers: { 'cache-control': 'public, max-age=31536000, immutable' } },
     '/Images/**': { headers: { 'cache-control': 'public, max-age=86400, stale-while-revalidate=604800' } },
     '/Icons/**': { headers: { 'cache-control': 'public, max-age=86400, stale-while-revalidate=604800' } },
+    // Hero background videos are multi-megabyte and effectively immutable —
+    // without this they were re-downloaded on every visit.
+    '/Background_Videos/**': { headers: { 'cache-control': 'public, max-age=2592000, stale-while-revalidate=604800' } },
+    // Public read endpoints are edge-cacheable; the handlers set the same
+    // s-maxage, this makes the intent explicit at the route level.
+    '/api/public/**': { headers: { 'cache-control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=600' } },
+    // Content pages are SSR'd from Supabase. A short edge TTL with a long
+    // stale-while-revalidate window keeps cold Supabase latency off the
+    // critical path without holding stale content for long.
+    '/about': { headers: { 'cache-control': 's-maxage=60, stale-while-revalidate=600' } },
+    '/contact': { headers: { 'cache-control': 's-maxage=60, stale-while-revalidate=600' } },
+    '/careers': { headers: { 'cache-control': 's-maxage=60, stale-while-revalidate=600' } },
+    '/blog': { headers: { 'cache-control': 's-maxage=60, stale-while-revalidate=600' } },
+    '/blog/**': { headers: { 'cache-control': 's-maxage=60, stale-while-revalidate=600' } },
+    '/portfolio': { headers: { 'cache-control': 's-maxage=60, stale-while-revalidate=600' } },
+    '/portfolio/**': { headers: { 'cache-control': 's-maxage=60, stale-while-revalidate=600' } },
+    '/case-studies': { headers: { 'cache-control': 's-maxage=60, stale-while-revalidate=600' } },
+    '/case-studies/**': { headers: { 'cache-control': 's-maxage=60, stale-while-revalidate=600' } },
+    '/services/**': { headers: { 'cache-control': 's-maxage=60, stale-while-revalidate=600' } },
     // Admin area is client-rendered SPA. Prerendering the SPA shells ensures
     // Cloudflare Pages serves them directly, avoiding 404s.
     '/admin': { ssr: false },

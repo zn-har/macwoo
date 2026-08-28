@@ -1,87 +1,15 @@
-import { useSupabase } from './useSupabase'
-import type { Database } from '~/types/supabase'
+// Types, defaults and the DB<->app mapping live in shared/ so the Nitro route
+// (/api/public/page-settings) and this composable can never drift apart.
+import {
+  defaultPageSettings,
+  mapPageSettingsToDb
+} from '#shared/page-settings'
+import type { PageSettings } from '#shared/page-settings'
 
-export interface PageSettings {
-  indexHeroImage: string
-  indexHeroVideo: string
-  aboutHeroImage: string
-  aboutHeroVideo: string
-  aboutBelieveImage: string
-  blogHeroImage: string
-  blogHeroVideo: string
-  servicesBrandingImage: string
-  servicesMarketingImage: string
-  servicesVideoImage: string
-  servicesVideoShowreel: string
-  careersHeroImage: string
-  careersHeroVideo: string
-  careersMiddleImage: string
-  contactHeroImage: string
-  contactHeroVideo: string
-}
+export type { PageSettings }
 
-const defaultSettings: PageSettings = {
-  indexHeroImage: '/Images/hero.png',
-  indexHeroVideo: '',
-  aboutHeroImage: '/Images/Branding.jpeg',
-  aboutHeroVideo: '/Background_Videos/About.mp4',
-  aboutBelieveImage: '/Images/what_we_believe.png',
-  blogHeroImage: '/Images/Branding.jpeg',
-  blogHeroVideo: '/Background_Videos/Blog.mp4',
-  servicesBrandingImage: '/Images/Branding.jpeg',
-  servicesMarketingImage: '/Images/Digital_Marketing.jpeg',
-  servicesVideoImage: '/Images/Video_Production.jpeg',
-  servicesVideoShowreel: '/Background_Videos/Portfolio.mp4',
-  careersHeroImage: '/Images/Designing.jpeg',
-  careersHeroVideo: '/Background_Videos/Careers.mp4',
-  careersMiddleImage: '/Images/Take_My_Familt_-_1.png',
-  contactHeroImage: '/Images/Marketing.jpeg',
-  contactHeroVideo: '/Background_Videos/Contact.mp4'
-}
-
-type DbPageSettings = Database['public']['Tables']['page_settings']['Row']
-
-function mapDbToSettings(db: DbPageSettings): PageSettings {
-  return {
-    indexHeroImage: db.index_hero_image || '/Images/hero.png',
-    indexHeroVideo: db.index_hero_video || '',
-    aboutHeroImage: db.about_hero_image || '/Images/Branding.jpeg',
-    aboutHeroVideo: db.about_hero_video || '/Background_Videos/About.mp4',
-    aboutBelieveImage: db.about_believe_image || '/Images/what_we_believe.png',
-    blogHeroImage: db.blog_hero_image || '/Images/Branding.jpeg',
-    blogHeroVideo: db.blog_hero_video || '/Background_Videos/Blog.mp4',
-    servicesBrandingImage: db.services_branding_image || '/Images/Branding.jpeg',
-    servicesMarketingImage: db.services_marketing_image || '/Images/Digital_Marketing.jpeg',
-    servicesVideoImage: db.services_video_image || '/Images/Video_Production.jpeg',
-    servicesVideoShowreel: db.services_video_showreel || '/Background_Videos/Portfolio.mp4',
-    careersHeroImage: db.careers_hero_image || '/Images/Designing.jpeg',
-    careersHeroVideo: db.careers_hero_video || '/Background_Videos/Careers.mp4',
-    careersMiddleImage: db.careers_middle_image || '/Images/Take_My_Familt_-_1.png',
-    contactHeroImage: db.contact_hero_image || '/Images/Marketing.jpeg',
-    contactHeroVideo: db.contact_hero_video || '/Background_Videos/Contact.mp4'
-  }
-}
-
-function mapSettingsToDb(settings: PageSettings): Omit<Database['public']['Tables']['page_settings']['Insert'], 'id' | 'updated_at'> {
-  return {
-    index_hero_image: settings.indexHeroImage,
-    index_hero_video: settings.indexHeroVideo,
-    about_hero_image: settings.aboutHeroImage,
-    about_hero_video: settings.aboutHeroVideo,
-    about_believe_image: settings.aboutBelieveImage,
-    blog_hero_image: settings.blogHeroImage,
-    blog_hero_video: settings.blogHeroVideo,
-    services_branding_image: settings.servicesBrandingImage,
-    services_marketing_image: settings.servicesMarketingImage,
-    services_video_image: settings.servicesVideoImage,
-    services_video_showreel: settings.servicesVideoShowreel,
-    careers_hero_image: settings.careersHeroImage,
-    careers_hero_video: settings.careersHeroVideo,
-    careers_middle_image: settings.careersMiddleImage,
-    contact_hero_image: settings.contactHeroImage,
-    contact_hero_video: settings.contactHeroVideo
-  }
-}
+const defaultSettings = defaultPageSettings
+const mapSettingsToDb = mapPageSettingsToDb
 
 let cachedSettings: PageSettings | null = null
 let cacheTime = 0
@@ -89,39 +17,64 @@ let activeFetchPromise: Promise<void> | null = null
 const CACHE_TTL = 300000 // 5 minutes
 
 export function usePageSettings() {
-  const supabase = useSupabase()
+  const getSupabase = useSupabaseLazy()
   const settings = useState<PageSettings>('page_settings', () => ({ ...defaultSettings }))
+  // Serialised into the SSR payload, so the client knows the settings it
+  // hydrated with are real DB values. The old check compared against the
+  // defaults, which re-fetched on every client navigation whenever a stored
+  // value happened to equal its default.
+  const loaded = useState<boolean>('page_settings_loaded', () => false)
 
   const fetchSettings = async () => {
-    if (cachedSettings && (Date.now() - cacheTime < CACHE_TTL)) {
-      settings.value = cachedSettings
-      return
+    // Read through the Nitro endpoint, not Supabase directly: it keeps
+    // `@supabase/supabase-js` out of the browser bundle and lets Cloudflare
+    // edge-cache the response.
+    const load = async () => {
+      const data = await $fetch<PageSettings>('/api/public/page-settings')
+      if (data) {
+        cachedSettings = data
+        cacheTime = Date.now()
+        settings.value = data
+        loaded.value = true
+      }
     }
 
-    if (activeFetchPromise) {
-      await activeFetchPromise
-      if (cachedSettings) {
-        settings.value = cachedSettings
+    // Module-level memo is CLIENT-ONLY — see the long note in usePortfolio.ts.
+    // A shared in-flight promise cannot cross requests inside a reused
+    // Cloudflare isolate without deadlocking later readers.
+    if (import.meta.server) {
+      try {
+        await load()
+      } catch (e) {
+        console.error('Error fetching /api/public/page-settings:', e)
       }
       return
     }
 
+    if (cachedSettings && (Date.now() - cacheTime < CACHE_TTL)) {
+      settings.value = cachedSettings
+      loaded.value = true
+      return
+    }
+
+    if (activeFetchPromise) {
+      try {
+        await activeFetchPromise
+      } catch {
+        // fall through to a fresh attempt below
+      }
+      if (cachedSettings) {
+        settings.value = cachedSettings
+        loaded.value = true
+        return
+      }
+    }
+
     activeFetchPromise = (async () => {
       try {
-        const { data, error } = await supabase
-          .from('page_settings')
-          .select('*')
-          .limit(1)
-          .maybeSingle()
-
-        if (error) throw error
-        if (data) {
-          cachedSettings = mapDbToSettings(data)
-          cacheTime = Date.now()
-          settings.value = cachedSettings
-        }
+        await load()
       } catch (e) {
-        console.error('Error fetching page settings from Supabase:', e)
+        console.error('Error fetching /api/public/page-settings:', e)
       } finally {
         activeFetchPromise = null
       }
@@ -130,13 +83,15 @@ export function usePageSettings() {
     await activeFetchPromise
   }
 
-  // Trigger fetch on server or if clean default
+  // Fetch on the server, or on the client only when nothing was hydrated
+  // (i.e. the SPA-rendered admin area).
   let fetchPromise: Promise<void> | null = null
-  if (import.meta.server || settings.value.indexHeroImage === defaultSettings.indexHeroImage) {
+  if (import.meta.server || !loaded.value) {
     fetchPromise = fetchSettings()
   }
 
   const updateSettings = async (updated: Partial<PageSettings>): Promise<boolean> => {
+    const supabase = await getSupabase()
     cachedSettings = null
     cacheTime = 0
     settings.value = { ...settings.value, ...updated }

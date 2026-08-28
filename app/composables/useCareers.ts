@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useSupabase } from './useSupabase'
 import { jobs as defaultJobs } from '~/data/careers'
 import type { JobListing } from '~/data/careers'
 
@@ -9,48 +8,63 @@ let activeFetchPromise: Promise<void> | null = null
 const CACHE_TTL = 300000 // 5 minutes
 
 export function useCareers() {
-  const supabase = useSupabase()
+  const getSupabase = useSupabaseLazy()
   const jobs = useState<JobListing[]>('careers', () => [])
 
   const fetchCareers = async () => {
+    // Read through the Nitro endpoint, not Supabase directly: it keeps
+    // `@supabase/supabase-js` out of the browser bundle and lets Cloudflare
+    // edge-cache the response.
+    const load = async () => {
+      const data = await $fetch<JobListing[]>('/api/public/careers')
+      if (data) {
+        cachedJobs = data
+        cacheTime = Date.now()
+        jobs.value = data
+      }
+    }
+
+    // The module-level memo is CLIENT-ONLY on purpose.
+    //
+    // On the server this module lives in a Cloudflare isolate that is reused
+    // across requests, and a promise created for request A cannot be awaited by
+    // request B — workerd cancels A's pending I/O the moment A's response is
+    // sent, so that promise never settles. Any caller that starts this fetch
+    // without awaiting it (a component rendering its own data, say) would
+    // therefore leave `activeFetchPromise` permanently pending and every later
+    // request would block on it forever. Server-side repetition is absorbed by
+    // the edge cache on /api/public/* instead.
+    if (import.meta.server) {
+      try {
+        await load()
+      } catch (e) {
+        console.error('Error fetching /api/public/careers:', e)
+      }
+      return
+    }
+
     if (cachedJobs && (Date.now() - cacheTime < CACHE_TTL)) {
       jobs.value = cachedJobs
       return
     }
 
     if (activeFetchPromise) {
-      await activeFetchPromise
+      try {
+        await activeFetchPromise
+      } catch {
+        // fall through to a fresh attempt below
+      }
       if (cachedJobs) {
         jobs.value = cachedJobs
+        return
       }
-      return
     }
 
     activeFetchPromise = (async () => {
       try {
-        const { data, error } = await supabase
-          .from('careers')
-          .select('*')
-          .eq('is_active', true)
-          .order('sort_order', { ascending: true })
-
-        if (error) throw error
-        if (data) {
-          const mappedJobs: JobListing[] = data.map((d: any) => ({
-            id: d.id,
-            title: d.title,
-            department: d.department,
-            location: d.location,
-            type: d.type,
-            experience: d.experience,
-            applyUrl: d.apply_url || ''
-          }))
-          cachedJobs = mappedJobs
-          cacheTime = Date.now()
-          jobs.value = mappedJobs
-        }
+        await load()
       } catch (e) {
-        console.error('Error fetching careers:', e)
+        console.error('Error fetching /api/public/careers:', e)
       } finally {
         activeFetchPromise = null
       }
@@ -66,6 +80,7 @@ export function useCareers() {
   }
 
   const addJob = async (job: Omit<JobListing, 'id'> & { id?: string }) => {
+    const supabase = await getSupabase()
     cachedJobs = null
     cacheTime = 0
     const payload = {
@@ -103,6 +118,7 @@ export function useCareers() {
   }
 
   const updateJob = async (id: string, updated: JobListing) => {
+    const supabase = await getSupabase()
     cachedJobs = null
     cacheTime = 0
     const payload = {
@@ -131,6 +147,7 @@ export function useCareers() {
   }
 
   const deleteJob = async (id: string) => {
+    const supabase = await getSupabase()
     cachedJobs = null
     cacheTime = 0
     try {
@@ -146,6 +163,7 @@ export function useCareers() {
   }
 
   const resetCareers = async () => {
+    const supabase = await getSupabase()
     cachedJobs = null
     cacheTime = 0
     try {

@@ -11,7 +11,7 @@ useSeoMeta({
   ogDescription: 'Explore brand transformations and case studies by Macawoo, a leading creative and strategic branding agency delivering measurable market impact.'
 })
 
-const siteUrl = 'https://www.macawoo.co'
+const siteUrl = 'https://macawoo.co'
 useHead({
   script: [
     {

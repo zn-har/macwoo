@@ -1,6 +1,12 @@
 <script setup>
 const route = useRoute()
-const siteUrl = 'https://www.macawoo.co'
+const siteUrl = 'https://macawoo.co'
+
+// The magnifying cursor is a desktop-mouse-only effect. It used to render
+// nothing on mobile but its 1000-line chunk was still downloaded, parsed and
+// executed there; gating the `v-if` on a real pointer keeps the chunk off
+// touch devices entirely.
+const isDesktopPointer = useDesktopPointer()
 
 useHead({
   meta: [
@@ -15,9 +21,9 @@ useHead({
     { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
     {
       rel: 'stylesheet',
-      href: 'https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=Fredoka:wght@400;500;600&display=swap',
+      href: 'https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,400;12..96,600;12..96,700&family=Fredoka:wght@400;500;600&display=swap',
       media: 'print',
-      onload: "this.media='all'"
+      onload: 'this.media=\'all\''
     },
     {
       rel: 'canonical',
@@ -136,8 +142,14 @@ const isInnerPage = computed(() => {
         :bg-color="footerBgColor"
         :footer-color="footerColor"
       />
-      <LazyChatWidget v-if="!isAdmin" />
+      <!-- The chat widget renders a closed launcher button; nothing about it is
+           needed for first interaction. `hydrate-on-idle` keeps its chunk out of
+           the hydration critical path on mobile. -->
+      <LazyChatWidget
+        v-if="!isAdmin"
+        hydrate-on-idle
+      />
     </div>
-    <LazyMagnifyingCursor v-if="!isAdmin" />
+    <LazyMagnifyingCursor v-if="!isAdmin && isDesktopPointer" />
   </UApp>
 </template>

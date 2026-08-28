@@ -16,10 +16,10 @@ await (settingsPromise || Promise.resolve())
 const containerRef = ref<HTMLElement | null>(null)
 const textRevealRef = ref<HTMLElement | null>(null)
 
-const isMobile = ref(false)
-const checkMobile = () => {
-  isMobile.value = window.innerWidth < 768
-}
+// Seeded from the request User-Agent during SSR (see useViewport) so phones
+// receive mobile markup on the first paint instead of the desktop scroll-track
+// layout followed by a full post-hydration re-render.
+const isMobile = useIsMobile(768)
 
 // Scroll-bound About Us section animation variables
 const aboutTrackRef = ref<HTMLElement | null>(null)
@@ -430,9 +430,6 @@ onMounted(() => {
     cards.forEach(card => observer.observe(card))
   }
 
-  checkMobile()
-  window.addEventListener('resize', checkMobile)
-
   window.addEventListener('scroll', handleScroll, { passive: true })
   window.addEventListener('resize', updateLogoOffset)
   computeScrollProgress()
@@ -443,7 +440,6 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', checkMobile)
   window.removeEventListener('scroll', handleScroll)
   window.removeEventListener('resize', updateLogoOffset)
 })
@@ -564,7 +560,7 @@ onUnmounted(() => {
         <div class="max-w-[1266px] w-full mx-auto px-6 md:px-8 flex-1 flex flex-col justify-between gap-4 md:gap-5">
           <!-- Header (Centered) -->
           <div
-            class="text-center shrink-0 will-change-transform"
+            class="text-center shrink-0"
             :style="whatWeDoHeaderStyle"
           >
             <h2
@@ -583,7 +579,7 @@ onUnmounted(() => {
             <!-- Card 1: Branding & Design -->
             <NuxtLink
               to="/services/branding-design"
-              class="relative rounded-[10px] overflow-hidden group block h-[280px] md:h-[420px] shadow-lg will-change-transform w-[85vw] md:w-full shrink-0 snap-center"
+              class="relative rounded-[10px] overflow-hidden group block h-[280px] md:h-[420px] shadow-lg w-[85vw] md:w-full shrink-0 snap-center"
               :style="getWhatWeDoCardStyle(0)"
             >
               <NuxtImg
@@ -614,7 +610,7 @@ onUnmounted(() => {
             <!-- Card 2: Digital Marketing -->
             <NuxtLink
               to="/services/digital-marketing"
-              class="relative rounded-[10px] overflow-hidden group block h-[280px] md:h-[420px] shadow-lg will-change-transform w-[85vw] md:w-full shrink-0 snap-center"
+              class="relative rounded-[10px] overflow-hidden group block h-[280px] md:h-[420px] shadow-lg w-[85vw] md:w-full shrink-0 snap-center"
               :style="getWhatWeDoCardStyle(1)"
             >
               <NuxtImg
@@ -645,7 +641,7 @@ onUnmounted(() => {
             <!-- Card 3: Video Production -->
             <NuxtLink
               to="/services/video-production"
-              class="relative rounded-[10px] overflow-hidden group block h-[280px] md:h-[420px] shadow-lg will-change-transform w-[85vw] md:w-full shrink-0 snap-center"
+              class="relative rounded-[10px] overflow-hidden group block h-[280px] md:h-[420px] shadow-lg w-[85vw] md:w-full shrink-0 snap-center"
               :style="getWhatWeDoCardStyle(2)"
             >
               <NuxtImg
@@ -849,7 +845,7 @@ onUnmounted(() => {
           <!-- Left side: Design card -->
           <div class="flex-1 w-full rounded-[32px] overflow-hidden relative min-h-[350px] lg:min-h-[500px] flex flex-col justify-end p-8 md:p-12 shadow-xl group [transform:translateZ(0)] isolate no-reveal-spotlight">
             <!-- Background Image -->
-            <div class="absolute inset-0 bg-[url('/Images/wavy_yellow_teal_bg.png')] bg-cover bg-center transition-transform duration-700 group-hover:scale-105 will-change-transform" />
+            <div class="absolute inset-0 bg-[url('/Images/wavy_yellow_teal_bg.jpg')] bg-cover bg-center transition-transform duration-700 group-hover:scale-105" />
             <!-- Glassmorphism Grid Overlay on the image -->
             <GlassGrid :grids="15" />
             <!-- Gradient Overlay for readability -->

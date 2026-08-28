@@ -12,7 +12,7 @@ if (!project.value) {
   throw createError({ statusCode: 404, statusMessage: 'Project not found', fatal: true })
 }
 
-const siteUrl = 'https://www.macawoo.co'
+const siteUrl = 'https://macawoo.co'
 const absoluteImageUrl = computed(() => {
   const img = project.value?.image
   if (!img) return `${siteUrl}/og-image.png`
@@ -415,7 +415,7 @@ const isVideoUrl = (url?: string) => {
           <div
             v-for="(media, i) in project.galleryImages"
             :key="`gallery-card-${i}`"
-            class="absolute inset-0 rounded-[28px] overflow-hidden bg-zinc-900 shadow-xl will-change-transform"
+            class="absolute inset-0 rounded-[28px] overflow-hidden bg-zinc-900 shadow-xl"
             :style="stackCardStyle(i)"
           >
             <iframe

@@ -1,4 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,400;12..96,600;12..96,700&family=Fredoka:wght@400;500;600&display=swap');
+/* Fonts are requested from app.vue with a non-blocking <link>. A CSS @import
+   here made the request render-blocking AND serialised it behind this
+   stylesheet's own download — the worst possible web-font load order. */
 @import "tailwindcss";
 
 @import "@nuxt/ui";
@@ -39,7 +41,6 @@
 
 @layer base {
   html {
-    scroll-behavior: smooth;
     /* Hide scrollbar for IE, Edge and Firefox */
     -ms-overflow-style: none;
     scrollbar-width: none;
@@ -64,6 +65,13 @@
 
   h1, h2, h3, h4, h5, h6 {
     @apply font-bold;
+  }
+
+  /* Smooth anchor scrolling, but never against an explicit user preference. */
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
   }
 }
 
@@ -278,16 +286,22 @@ body.custom-cursor-active * {
    ========================================================================== */
 .blog-card {
   box-shadow: 0px 4px 12px rgba(10, 22, 40, 0.04);
-  transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), 
+  transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1),
               box-shadow 0.4s cubic-bezier(0.25, 1, 0.5, 1);
-  will-change: transform, box-shadow;
+  /* No `will-change` here. As a permanent declaration it pinned a compositor
+     layer per card for the life of the page (real memory pressure on low-RAM
+     Android) to optimise a hover that can never happen on touch. */
 }
 
-.blog-card:hover {
-  transform: translateY(-8px);
-  box-shadow: 
-    0 20px 40px -12px rgba(10, 22, 40, 0.35), /* Soft Dark Base Shadow */
-    0 0 30px 8px rgba(247, 236, 18, 0.5);      /* Brand Yellow Outer Aura Glow */
+/* Hover-only decoration — skip it entirely on touch pointers, where it is
+   unreachable and the box-shadow repaint is pure cost. */
+@media (hover: hover) and (pointer: fine) {
+  .blog-card:hover {
+    transform: translateY(-8px);
+    box-shadow:
+      0 20px 40px -12px rgba(10, 22, 40, 0.35), /* Soft Dark Base Shadow */
+      0 0 30px 8px rgba(247, 236, 18, 0.5);      /* Brand Yellow Outer Aura Glow */
+  }
 }
 
 

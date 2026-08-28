@@ -7,24 +7,30 @@ const props = withDefaults(defineProps<Props>(), {
   grids: 53
 })
 
-// Responsive grid count — scales proportionally with viewport width
-const responsiveCount = ref(props.grids)
+// Responsive panel count. This used to be seeded with the full desktop count
+// (53), so a phone's SSR HTML contained 53 panels — each with an inline SVG, a
+// gradient, two box-shadows and a ::before — that hydration then threw away.
+// Seeding from the User-Agent means mobile renders the small count from the
+// start; only genuinely ambiguous form factors get corrected on mount.
+const isMobile = useIsMobile(1024)
+
+const countForWidth = (w: number) => {
+  let count: number
+  if (w >= 1280) count = props.grids
+  else if (w >= 1024) count = Math.round(props.grids * 0.72)
+  else if (w >= 768) count = Math.round(props.grids * 0.50)
+  else if (w >= 480) count = Math.round(props.grids * 0.30)
+  else count = Math.round(props.grids * 0.18)
+  // Always show at least 3 panels
+  return Math.max(3, count)
+}
+
+const responsiveCount = ref(
+  isMobile.value ? Math.max(3, Math.round(props.grids * 0.30)) : props.grids
+)
 
 function updateCount() {
-  const w = window.innerWidth
-  if (w >= 1280) {
-    responsiveCount.value = props.grids          // xl+: full count (e.g. 53 or 15)
-  } else if (w >= 1024) {
-    responsiveCount.value = Math.round(props.grids * 0.72)  // lg: ~72%
-  } else if (w >= 768) {
-    responsiveCount.value = Math.round(props.grids * 0.50)  // md: ~50%
-  } else if (w >= 480) {
-    responsiveCount.value = Math.round(props.grids * 0.30)  // sm: ~30%
-  } else {
-    responsiveCount.value = Math.round(props.grids * 0.18)  // xs: ~18%
-  }
-  // Always show at least 3 panels
-  if (responsiveCount.value < 3) responsiveCount.value = 3
+  responsiveCount.value = countForWidth(window.innerWidth)
 }
 
 onMounted(() => {
@@ -42,7 +48,6 @@ onUnmounted(() => {
     <!-- Single Backdrop Blur Overlay for high-performance scrolling. -->
     <div
       class="glass-blur absolute inset-0 pointer-events-none z-[4]"
-      style="backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);"
       aria-hidden="true"
     />
 
@@ -93,8 +98,9 @@ onUnmounted(() => {
 /* 1. Force the blur layer onto its own compositor layer so Firefox applies
       backdrop-filter consistently instead of flickering. */
 .glass-blur {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   transform: translateZ(0);
-  will-change: transform;
   isolation: isolate;
   /* Base frosted tint present in EVERY browser. Guarantees the glass never
      reads as fully transparent even when backdrop-filter silently no-ops.
@@ -190,5 +196,32 @@ onUnmounted(() => {
   );
   pointer-events: none;
   z-index: 2;
+}
+
+/* A full-viewport backdrop-filter that samples a decoding <video> is a
+   per-frame GPU blur of the whole screen — the single biggest cause of scroll
+   jank on mid-range Android. Touch/small viewports get the flat frosted tint
+   the no-backdrop-filter fallback above already defines. `will-change` is
+   likewise scoped to desktop: as a permanent declaration it pinned an extra
+   compositor layer for the life of the page. */
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+  .glass-blur {
+    will-change: transform;
+  }
+}
+
+@media (max-width: 1023px), (hover: none), (pointer: coarse) {
+  .glass-blur {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background-color: rgba(20, 20, 20, 0.38);
+  }
+
+  /* Bevel highlights and cast shadows on every panel are pure overdraw at
+     phone panel widths. */
+  .glass-panel:nth-child(odd),
+  .glass-panel:nth-child(even) {
+    box-shadow: 1px 0 0 rgba(255, 255, 255, 0.14);
+  }
 }
 </style>

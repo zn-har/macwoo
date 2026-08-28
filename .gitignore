@@ -28,3 +28,5 @@ logs
 !README.md
 .mcp.*
 .hevc-originals
+# Wrangler scratch dirs (one had been committed under public/)
+.wrangler/

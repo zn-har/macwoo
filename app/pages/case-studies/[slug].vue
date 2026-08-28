@@ -12,7 +12,7 @@ if (!study.value) {
   throw createError({ statusCode: 404, statusMessage: 'Case study not found', fatal: true })
 }
 
-const siteUrl = 'https://www.macawoo.co'
+const siteUrl = 'https://macawoo.co'
 const absoluteImageUrl = computed(() => {
   const img = study.value?.image
   if (!img) return `${siteUrl}/og-image.png`

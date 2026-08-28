@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useSupabase } from './useSupabase'
 import { caseStudies as defaultCaseStudies } from '~/data/case-studies'
 import type { CaseStudy } from '~/data/case-studies'
 
@@ -9,58 +8,63 @@ let activeFetchPromise: Promise<void> | null = null
 const CACHE_TTL = 300000 // 5 minutes
 
 export function useCaseStudies() {
-  const supabase = useSupabase()
+  const getSupabase = useSupabaseLazy()
   const caseStudies = useState<CaseStudy[]>('caseStudies', () => [])
 
   const fetchCaseStudies = async () => {
+    // Read through the Nitro endpoint, not Supabase directly: it keeps
+    // `@supabase/supabase-js` out of the browser bundle and lets Cloudflare
+    // edge-cache the response.
+    const load = async () => {
+      const data = await $fetch<CaseStudy[]>('/api/public/case-studies')
+      if (data) {
+        cachedCaseStudies = data
+        cacheTime = Date.now()
+        caseStudies.value = data
+      }
+    }
+
+    // The module-level memo is CLIENT-ONLY on purpose.
+    //
+    // On the server this module lives in a Cloudflare isolate that is reused
+    // across requests, and a promise created for request A cannot be awaited by
+    // request B — workerd cancels A's pending I/O the moment A's response is
+    // sent, so that promise never settles. Any caller that starts this fetch
+    // without awaiting it (a component rendering its own data, say) would
+    // therefore leave `activeFetchPromise` permanently pending and every later
+    // request would block on it forever. Server-side repetition is absorbed by
+    // the edge cache on /api/public/* instead.
+    if (import.meta.server) {
+      try {
+        await load()
+      } catch (e) {
+        console.error('Error fetching /api/public/case-studies:', e)
+      }
+      return
+    }
+
     if (cachedCaseStudies && (Date.now() - cacheTime < CACHE_TTL)) {
       caseStudies.value = cachedCaseStudies
       return
     }
 
     if (activeFetchPromise) {
-      await activeFetchPromise
+      try {
+        await activeFetchPromise
+      } catch {
+        // fall through to a fresh attempt below
+      }
       if (cachedCaseStudies) {
         caseStudies.value = cachedCaseStudies
+        return
       }
-      return
     }
 
     activeFetchPromise = (async () => {
       try {
-        const { data, error } = await supabase
-          .from('case_studies')
-          .select('*, categories(name)')
-          .order('sort_order', { ascending: true })
-
-        if (error) throw error
-        if (data) {
-          const mappedCaseStudies: CaseStudy[] = data.map((d: any) => ({
-            slug: d.slug,
-            title: d.title,
-            client: d.client,
-            tags: d.tags || [],
-            category: d.categories?.name || 'Branding',
-            image: d.image,
-            heroImage: d.hero_image,
-            tagline: d.tagline || undefined,
-            services: d.services || undefined,
-            industry: d.industry || undefined,
-            date: d.date || undefined,
-            challenge: d.challenge || '',
-            challengeParagraphs: d.challenge_paragraphs || [],
-            approach: d.approach || '',
-            approachParagraphs: d.approach_paragraphs || [],
-            solution: d.solution || [],
-            results: (d.results as any) || [],
-            resultsSummary: d.results_summary || undefined
-          }))
-          cachedCaseStudies = mappedCaseStudies
-          cacheTime = Date.now()
-          caseStudies.value = mappedCaseStudies
-        }
+        await load()
       } catch (e) {
-        console.error('Error fetching case studies:', e)
+        console.error('Error fetching /api/public/case-studies:', e)
       } finally {
         activeFetchPromise = null
       }
@@ -76,6 +80,7 @@ export function useCaseStudies() {
   }
 
   const resolveCategoryId = async (categoryName: string | undefined): Promise<string | null> => {
+    const supabase = await getSupabase()
     if (!categoryName) return null
     const { data } = await supabase
       .from('categories')
@@ -87,6 +92,7 @@ export function useCaseStudies() {
   }
 
   const addCaseStudy = async (study: CaseStudy) => {
+    const supabase = await getSupabase()
     cachedCaseStudies = null
     cacheTime = 0
     const categoryId = await resolveCategoryId(study.category)
@@ -125,6 +131,7 @@ export function useCaseStudies() {
   }
 
   const updateCaseStudy = async (slug: string, updated: CaseStudy) => {
+    const supabase = await getSupabase()
     cachedCaseStudies = null
     cacheTime = 0
     const categoryId = await resolveCategoryId(updated.category)
@@ -167,6 +174,7 @@ export function useCaseStudies() {
   }
 
   const deleteCaseStudy = async (slug: string) => {
+    const supabase = await getSupabase()
     cachedCaseStudies = null
     cacheTime = 0
     try {
@@ -182,6 +190,7 @@ export function useCaseStudies() {
   }
 
   const resetCaseStudies = async () => {
+    const supabase = await getSupabase()
     cachedCaseStudies = null
     cacheTime = 0
     try {

@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useSupabase } from './useSupabase'
 import { projects as defaultProjects } from '~/data/portfolio'
 import type { PortfolioProject } from '~/data/portfolio'
 
@@ -20,56 +19,63 @@ let activeFetchPromise: Promise<void> | null = null
 const CACHE_TTL = 300000 // 5 minutes
 
 export function usePortfolio() {
-  const supabase = useSupabase()
+  const getSupabase = useSupabaseLazy()
   const projects = useState<AdminPortfolioProject[]>('portfolio', () => [])
 
   const fetchProjects = async () => {
+    // Read through the Nitro endpoint, not Supabase directly: it keeps
+    // `@supabase/supabase-js` out of the browser bundle and lets Cloudflare
+    // edge-cache the response.
+    const load = async () => {
+      const data = await $fetch<AdminPortfolioProject[]>('/api/public/portfolio')
+      if (data) {
+        cachedProjects = data
+        cacheTime = Date.now()
+        projects.value = data
+      }
+    }
+
+    // The module-level memo is CLIENT-ONLY on purpose.
+    //
+    // On the server this module lives in a Cloudflare isolate that is reused
+    // across requests, and a promise created for request A cannot be awaited by
+    // request B — workerd cancels A's pending I/O the moment A's response is
+    // sent, so that promise never settles. Any caller that starts this fetch
+    // without awaiting it (a component rendering its own data, say) would
+    // therefore leave `activeFetchPromise` permanently pending and every later
+    // request would block on it forever. Server-side repetition is absorbed by
+    // the edge cache on /api/public/* instead.
+    if (import.meta.server) {
+      try {
+        await load()
+      } catch (e) {
+        console.error('Error fetching /api/public/portfolio:', e)
+      }
+      return
+    }
+
     if (cachedProjects && (Date.now() - cacheTime < CACHE_TTL)) {
       projects.value = cachedProjects
       return
     }
 
     if (activeFetchPromise) {
-      await activeFetchPromise
+      try {
+        await activeFetchPromise
+      } catch {
+        // fall through to a fresh attempt below
+      }
       if (cachedProjects) {
         projects.value = cachedProjects
+        return
       }
-      return
     }
 
     activeFetchPromise = (async () => {
       try {
-        const { data, error } = await supabase
-          .from('portfolio_projects')
-          .select('*, categories(name)')
-          .order('sort_order', { ascending: true })
-
-        if (error) throw error
-        if (data) {
-          const mappedProjects: AdminPortfolioProject[] = data.map((d: any) => ({
-            slug: d.slug,
-            title: d.title,
-            subtitle: d.subtitle,
-            tags: d.tags || [],
-            category: d.categories?.name || 'Branding',
-            image: d.image,
-            heroImage: d.hero_image,
-            galleryImages: d.gallery_images || [],
-            story: d.story || '',
-            tagline: d.tagline || undefined,
-            services: d.services || undefined,
-            industry: d.industry || undefined,
-            date: d.date || undefined,
-            storyParagraphs: d.story_paragraphs || [],
-            featured: d.published !== false,
-            displayOrder: d.sort_order
-          }))
-          cachedProjects = mappedProjects
-          cacheTime = Date.now()
-          projects.value = mappedProjects
-        }
+        await load()
       } catch (e) {
-        console.error('Error fetching portfolio projects:', e)
+        console.error('Error fetching /api/public/portfolio:', e)
       } finally {
         activeFetchPromise = null
       }
@@ -85,6 +91,7 @@ export function usePortfolio() {
   }
 
   const resolveCategoryId = async (categoryName: string): Promise<string | null> => {
+    const supabase = await getSupabase()
     const { data } = await supabase
       .from('categories')
       .select('id')
@@ -95,6 +102,7 @@ export function usePortfolio() {
   }
 
   const addProject = async (project: AdminPortfolioProject) => {
+    const supabase = await getSupabase()
     cachedProjects = null
     cacheTime = 0
     const categoryId = await resolveCategoryId(project.category)
@@ -129,6 +137,7 @@ export function usePortfolio() {
   }
 
   const updateProject = async (slug: string, updated: AdminPortfolioProject) => {
+    const supabase = await getSupabase()
     cachedProjects = null
     cacheTime = 0
     const categoryId = await resolveCategoryId(updated.category)
@@ -168,6 +177,7 @@ export function usePortfolio() {
   }
 
   const deleteProject = async (slug: string) => {
+    const supabase = await getSupabase()
     cachedProjects = null
     cacheTime = 0
     try {
@@ -183,6 +193,7 @@ export function usePortfolio() {
   }
 
   const resetPortfolio = async () => {
+    const supabase = await getSupabase()
     cachedProjects = null
     cacheTime = 0
     try {

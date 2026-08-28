@@ -11,7 +11,7 @@ useSeoMeta({
   ogDescription: 'Explore selected works by Macawoo, a creative and strategic branding agency. A curated showcase of brand identities, campaigns, and visual design.'
 })
 
-const siteUrl = 'https://www.macawoo.co'
+const siteUrl = 'https://macawoo.co'
 useHead({
   script: [
     {

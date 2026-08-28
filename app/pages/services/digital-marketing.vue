@@ -9,7 +9,7 @@ useSeoMeta({
   ogDescription: 'Macawoo is a creative and strategic branding agency delivering data-driven digital marketing campaigns that reach the right audience and deliver high ROI.'
 })
 
-const siteUrl = 'https://www.macawoo.co'
+const siteUrl = 'https://macawoo.co'
 useHead({
   script: [
     {

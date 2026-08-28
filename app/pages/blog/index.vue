@@ -15,7 +15,7 @@ useSeoMeta({
   ogDescription: 'Ideas, insights, and expert perspectives on branding strategy, creative direction, and digital marketing from Macawoo.'
 })
 
-const siteUrl = 'https://www.macawoo.co'
+const siteUrl = 'https://macawoo.co'
 useHead({
   script: [
     {

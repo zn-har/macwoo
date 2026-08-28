@@ -6,7 +6,7 @@ useSeoMeta({
   ogDescription: 'Read the Terms and Conditions for using the Macawoo website. By accessing our site, you agree to comply with these terms.'
 })
 
-const siteUrl = 'https://www.macawoo.co'
+const siteUrl = 'https://macawoo.co'
 useHead({
   script: [
     {

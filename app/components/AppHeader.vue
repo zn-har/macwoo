@@ -2,7 +2,6 @@
 const isMenuOpen = ref(false)
 const isServicesOpen = ref(false)
 const isMobileServicesOpen = ref(false)
-const isScrolled = ref(false)
 const scrollProgress = ref(0)
 
 // ── Sliding glass pill state ──
@@ -65,8 +64,13 @@ const onScroll = () => {
   if (rafId) return
   rafId = requestAnimationFrame(() => {
     const maxScroll = 500
-    scrollProgress.value = Math.min(Math.max(window.scrollY / maxScroll, 0), 1)
-    isScrolled.value = window.scrollY > 250
+    const raw = Math.min(Math.max(window.scrollY / maxScroll, 0), 1)
+    // Quantise to 1/40ths. The raw value changed on essentially every scroll
+    // frame, and each change re-rendered the whole header (and, on desktop,
+    // re-ran a max-width layout pass). 40 steps is imperceptible for an
+    // opacity/translate fade but cuts the render count by an order of magnitude.
+    const stepped = Math.round(raw * 40) / 40
+    if (stepped !== scrollProgress.value) scrollProgress.value = stepped
     rafId = 0
   })
 }

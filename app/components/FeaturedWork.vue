@@ -1,5 +1,8 @@
 <script setup lang="ts">
-const { projects, pending } = useFeaturedProjects()
+const { projects, pending, fetchPromise } = useFeaturedProjects()
+if (fetchPromise) {
+  await fetchPromise
+}
 
 const MAX_VISIBLE = 4
 const ROTATE_MS = 10000
@@ -34,17 +37,57 @@ function rotate() {
   slotIndices.value = slotIndices.value.map((v, i) => (i === slot ? pick : v))
 }
 
+// The rotation timer used to run for the lifetime of the page. Every tick woke
+// the main thread, re-rendered the grid and kicked off new image requests —
+// even with the section far off-screen or the tab backgrounded, which on a
+// phone means wasted CPU, battery and cellular data.
+const sectionRef = ref<HTMLElement | null>(null)
+let observer: IntersectionObserver | null = null
+let isVisible = false
+
+function stopTimer() {
+  if (rotateTimer) {
+    clearInterval(rotateTimer)
+    rotateTimer = null
+  }
+}
+
+function syncTimer() {
+  const shouldRun = isVisible && document.visibilityState === 'visible'
+  if (shouldRun && !rotateTimer) {
+    rotateTimer = setInterval(rotate, ROTATE_MS)
+  } else if (!shouldRun) {
+    stopTimer()
+  }
+}
+
 onMounted(() => {
-  rotateTimer = setInterval(rotate, ROTATE_MS)
+  if (sectionRef.value && typeof IntersectionObserver !== 'undefined') {
+    observer = new IntersectionObserver((entries) => {
+      isVisible = entries.some(e => e.isIntersecting)
+      syncTimer()
+    }, { rootMargin: '200px 0px' })
+    observer.observe(sectionRef.value)
+  } else {
+    isVisible = true
+  }
+  document.addEventListener('visibilitychange', syncTimer)
+  syncTimer()
 })
 
 onUnmounted(() => {
-  if (rotateTimer) clearInterval(rotateTimer)
+  observer?.disconnect()
+  observer = null
+  document.removeEventListener('visibilitychange', syncTimer)
+  stopTimer()
 })
 </script>
 
 <template>
-  <section class="py-16 md:py-20 bg-[#0596B8]">
+  <section
+    ref="sectionRef"
+    class="py-16 md:py-20 bg-[#0596B8]"
+  >
     <div class="max-w-[1201px] mx-auto px-6 md:px-8">
       <!-- ── Header ── -->
       <div class="text-left md:text-center max-w-[700px] md:mx-auto mb-14 md:mb-16">

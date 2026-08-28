@@ -10,7 +10,7 @@ useSeoMeta({
   ogDescription: 'Connect with Macawoo, a leading creative and strategic branding agency. Let\'s partner to craft brand strategies that command attention and drive exponential growth.'
 })
 
-const siteUrl = 'https://www.macawoo.co'
+const siteUrl = 'https://macawoo.co'
 useHead({
   script: [
     {

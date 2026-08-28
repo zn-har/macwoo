@@ -1,5 +1,3 @@
-import { useSupabase } from './useSupabase'
-
 export interface Category {
   id: string
   name: string
@@ -13,39 +11,64 @@ let activeFetchPromise: Promise<void> | null = null
 const CACHE_TTL = 300000 // 5 minutes
 
 export function useCategories() {
-  const supabase = useSupabase()
+  const getSupabase = useSupabaseLazy()
   const dbCategories = useState<Category[]>('db_categories', () => [])
   const categories = computed(() => dbCategories.value.map(c => c.name))
 
   const fetchCategories = async () => {
+    // Read through the Nitro endpoint, not Supabase directly: it keeps
+    // `@supabase/supabase-js` out of the browser bundle and lets Cloudflare
+    // edge-cache the response.
+    const load = async () => {
+      const data = await $fetch<Category[]>('/api/public/categories')
+      if (data) {
+        cachedCategories = data
+        cacheTime = Date.now()
+        dbCategories.value = data
+      }
+    }
+
+    // The module-level memo is CLIENT-ONLY on purpose.
+    //
+    // On the server this module lives in a Cloudflare isolate that is reused
+    // across requests, and a promise created for request A cannot be awaited by
+    // request B — workerd cancels A's pending I/O the moment A's response is
+    // sent, so that promise never settles. Any caller that starts this fetch
+    // without awaiting it (a component rendering its own data, say) would
+    // therefore leave `activeFetchPromise` permanently pending and every later
+    // request would block on it forever. Server-side repetition is absorbed by
+    // the edge cache on /api/public/* instead.
+    if (import.meta.server) {
+      try {
+        await load()
+      } catch (e) {
+        console.error('Error fetching /api/public/categories:', e)
+      }
+      return
+    }
+
     if (cachedCategories && (Date.now() - cacheTime < CACHE_TTL)) {
       dbCategories.value = cachedCategories
       return
     }
 
     if (activeFetchPromise) {
-      await activeFetchPromise
+      try {
+        await activeFetchPromise
+      } catch {
+        // fall through to a fresh attempt below
+      }
       if (cachedCategories) {
         dbCategories.value = cachedCategories
+        return
       }
-      return
     }
 
     activeFetchPromise = (async () => {
       try {
-        const { data, error } = await supabase
-          .from('categories')
-          .select('*')
-          .order('sort_order', { ascending: true })
-        if (error) throw error
-        if (data) {
-          const categoriesData: Category[] = data
-          cachedCategories = categoriesData
-          cacheTime = Date.now()
-          dbCategories.value = categoriesData
-        }
+        await load()
       } catch (e) {
-        console.error('Error fetching categories:', e)
+        console.error('Error fetching /api/public/categories:', e)
       } finally {
         activeFetchPromise = null
       }
@@ -61,6 +84,7 @@ export function useCategories() {
   }
 
   const addCategory = async (catName: string) => {
+    const supabase = await getSupabase()
     cachedCategories = null
     cacheTime = 0
     const trimmed = catName.trim()
@@ -86,6 +110,7 @@ export function useCategories() {
   }
 
   const deleteCategory = async (catName: string) => {
+    const supabase = await getSupabase()
     cachedCategories = null
     cacheTime = 0
     const target = dbCategories.value.find(c => c.name === catName)
@@ -103,6 +128,7 @@ export function useCategories() {
   }
 
   const resetCategories = async () => {
+    const supabase = await getSupabase()
     cachedCategories = null
     cacheTime = 0
     const defaults = [

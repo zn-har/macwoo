@@ -44,7 +44,7 @@ useSeoMeta({
   ogDescription: 'As a creative and strategic branding agency, Macawoo produces high-impact videos and brand films that captivate audiences and drive results.'
 })
 
-const siteUrl = 'https://www.macawoo.co'
+const siteUrl = 'https://macawoo.co'
 useHead({
   script: [
     {

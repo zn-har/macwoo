@@ -14,7 +14,7 @@ if (!post.value) {
   throw createError({ statusCode: 404, statusMessage: 'Post not found', fatal: true })
 }
 
-const siteUrl = 'https://www.macawoo.co'
+const siteUrl = 'https://macawoo.co'
 const absoluteImageUrl = computed(() => {
   const img = post.value?.image
   if (!img) return `${siteUrl}/og-image.png`

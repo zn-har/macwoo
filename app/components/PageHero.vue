@@ -39,6 +39,13 @@ const props = withDefaults(defineProps<Props>(), {
 const videoLoaded = ref(false)
 const videoRef = ref<HTMLVideoElement | null>(null)
 
+// The hero video is the intended hero on EVERY device and setting — `image` is
+// not a substitute for it. So this is never gated on viewport, pointer type or
+// prefers-reduced-motion; whenever a `video` prop exists, it plays. Mobile cost
+// is handled by keeping the files small (720p, ~0.3–0.9 MB) and long-cached,
+// not by withholding the video.
+const showVideo = computed(() => !!props.video)
+
 // Reveal the video as soon as it has decodable frames. Deliberately NOT gated
 // on play() resolving: a rejected play() — autoplay policy, or an AbortError
 // from a competing load() — would otherwise leave the wrapper pinned at
@@ -73,6 +80,7 @@ const onVideoError = () => {
 
 watch(() => props.video, () => {
   videoLoaded.value = false
+  if (!showVideo.value) return
   nextTick(() => {
     if (videoRef.value) {
       videoRef.value.load()
@@ -82,21 +90,12 @@ watch(() => props.video, () => {
 })
 
 useHead({
-  link: computed(() => {
-    const links: any[] = []
-    if (props.image) {
-      links.push({
-        rel: 'preload',
-        as: 'image',
-        href: props.image,
-        fetchpriority: 'high'
-      })
-    }
-    // NOTE: deliberately no <link rel=preload as=video>. The hero video is a
-    // decorative background, not the LCP element — preloading it high-priority
-    // starves the real LCP (hero image/text) of bandwidth on first paint.
-    return links
-  })
+  // NOTE: deliberately no <link rel=preload as=video>. The hero video is a
+  // decorative background, not the LCP element — preloading it high-priority
+  // starves the real LCP (hero image/text) of bandwidth on first paint.
+  link: computed(() => props.image
+    ? [{ rel: 'preload', as: 'image', href: props.image, fetchpriority: 'high' }]
+    : [])
 })
 
 const isScrolled = ref(false)
@@ -124,10 +123,12 @@ onMounted(() => {
   // resets the element, aborts that fetch, and re-downloads the whole file.
   // tryPlayVideo() also covers the case where loadeddata/canplay/playing all
   // fired before hydration attached their listeners.
-  tryPlayVideo()
-  window.addEventListener('pointerdown', handleFirstUserInteraction, { passive: true, once: true })
-  window.addEventListener('touchstart', handleFirstUserInteraction, { passive: true, once: true })
-  window.addEventListener('click', handleFirstUserInteraction, { passive: true, once: true })
+  if (showVideo.value) {
+    tryPlayVideo()
+    window.addEventListener('pointerdown', handleFirstUserInteraction, { passive: true, once: true })
+    window.addEventListener('touchstart', handleFirstUserInteraction, { passive: true, once: true })
+    window.addEventListener('click', handleFirstUserInteraction, { passive: true, once: true })
+  }
 
   if (props.showScrollIndicator) {
     window.addEventListener('scroll', handleScroll, { passive: true })
@@ -152,7 +153,7 @@ onUnmounted(() => {
   >
     <!-- Video background wrapper -->
     <div
-      v-if="video"
+      v-if="showVideo"
       class="absolute inset-0 w-full h-full object-cover transition-opacity duration-1000"
       :class="[videoLoaded ? 'opacity-100' : 'opacity-[0.01]']"
       :style="imageStyle"
@@ -171,14 +172,13 @@ onUnmounted(() => {
         @loadeddata="tryPlayVideo"
         @canplay="tryPlayVideo"
         @playing="videoLoaded = true"
-        @timeupdate="markVideoReady"
         @error="onVideoError"
       />
     </div>
 
     <!-- Static image background -->
     <NuxtImg
-      v-if="image && (!video || !videoLoaded)"
+      v-if="image && (!showVideo || !videoLoaded)"
       :src="image"
       :alt="alt || titleHtml?.replace(/<[^>]*>/g, '') || 'Macawoo hero background'"
       class="absolute inset-0 w-full h-full object-cover opacity-30"
@@ -272,159 +272,9 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- SVG Displacement Filters for Flat Glass Rectangle Refraction -->
-    <svg
-      class="absolute w-0 h-0 pointer-events-none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <defs>
-        <!--
-          Left displacement filter: shifts the background flatly to the left
-          inside the column, returning to 0 at the beveled outer edges.
-        -->
-        <filter
-          id="glass-dispersion-left"
-          x="-20%"
-          y="-10%"
-          width="140%"
-          height="120%"
-          filterUnits="objectBoundingBox"
-        >
-          <feImage
-            href="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='0'%3E%3Cstop offset='0%25' stop-color='%23808080'/%3E%3Cstop offset='8%25' stop-color='%23588080'/%3E%3Cstop offset='92%25' stop-color='%23588080'/%3E%3Cstop offset='100%25' stop-color='%23808080'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3C/svg%3E"
-            result="dispMap"
-            x="0%"
-            y="0%"
-            width="100%"
-            height="100%"
-            preserveAspectRatio="none"
-          />
-          <feDisplacementMap
-            in="SourceGraphic"
-            in2="dispMap"
-            scale="20"
-            xChannelSelector="R"
-            yChannelSelector="G"
-            result="displaced"
-          />
-          <feOffset
-            dx="-5.5"
-            dy="-3.5"
-            in="displaced"
-            result="red"
-          />
-          <feColorMatrix
-            type="matrix"
-            values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"
-            in="red"
-            result="red-only"
-          />
-
-          <feOffset
-            dx="5.5"
-            dy="3.5"
-            in="displaced"
-            result="blue"
-          />
-          <feColorMatrix
-            type="matrix"
-            values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0"
-            in="blue"
-            result="blue-only"
-          />
-
-          <feColorMatrix
-            type="matrix"
-            values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0"
-            in="displaced"
-            result="green-only"
-          />
-
-          <feBlend
-            mode="screen"
-            in="red-only"
-            in2="green-only"
-            result="rg"
-          />
-          <feBlend
-            mode="screen"
-            in="rg"
-            in2="blue-only"
-          />
-        </filter>
-
-        <filter
-          id="glass-dispersion-right"
-          x="-20%"
-          y="-10%"
-          width="140%"
-          height="120%"
-          filterUnits="objectBoundingBox"
-        >
-          <feImage
-            href="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='0'%3E%3Cstop offset='0%25' stop-color='%23808080'/%3E%3Cstop offset='8%25' stop-color='%23a88080'/%3E%3Cstop offset='92%25' stop-color='%23a88080'/%3E%3Cstop offset='100%25' stop-color='%23808080'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3C/svg%3E"
-            result="dispMap"
-            x="0%"
-            y="0%"
-            width="100%"
-            height="100%"
-            preserveAspectRatio="none"
-          />
-          <feDisplacementMap
-            in="SourceGraphic"
-            in2="dispMap"
-            scale="20"
-            xChannelSelector="R"
-            yChannelSelector="G"
-            result="displaced"
-          />
-          <feOffset
-            dx="-5.5"
-            dy="-3.5"
-            in="displaced"
-            result="red"
-          />
-          <feColorMatrix
-            type="matrix"
-            values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"
-            in="red"
-            result="red-only"
-          />
-
-          <feOffset
-            dx="5.5"
-            dy="3.5"
-            in="displaced"
-            result="blue"
-          />
-          <feColorMatrix
-            type="matrix"
-            values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0"
-            in="blue"
-            result="blue-only"
-          />
-
-          <feColorMatrix
-            type="matrix"
-            values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0"
-            in="displaced"
-            result="green-only"
-          />
-
-          <feBlend
-            mode="screen"
-            in="red-only"
-            in2="green-only"
-            result="rg"
-          />
-          <feBlend
-            mode="screen"
-            in="rg"
-            in2="blue-only"
-          />
-        </filter>
-      </defs>
-    </svg>
+    <!-- The #glass-dispersion-left / -right displacement filters that used to
+         live here were emitted by every PageHero on every page (mobile
+         included) and referenced by nothing. Removed. -->
 
     <!-- Scroll Down Indicator -->
     <div
@@ -440,7 +290,10 @@ onUnmounted(() => {
         Scroll Down
       </span>
       <div class="relative w-[24px] h-[40px] rounded-full border-2 border-white/40 flex justify-center group-hover:border-white/80 transition-colors duration-300">
-        <div class="w-1.5 h-1.5 bg-[#F7EC12] rounded-full mt-2 scroll-dot-animated" />
+        <div
+          class="w-1.5 h-1.5 bg-[#F7EC12] rounded-full mt-2 scroll-dot-animated"
+          :class="{ 'is-paused': isScrolled }"
+        />
       </div>
     </div>
   </section>
@@ -524,5 +377,17 @@ onUnmounted(() => {
 
 .scroll-dot-animated {
   animation: scroll-dot 1.8s infinite cubic-bezier(0.15, 0.41, 0.69, 0.94);
+}
+
+/* The indicator fades out once the user scrolls, but the keyframes kept
+   running behind opacity:0 for the rest of the session. */
+.scroll-dot-animated.is-paused {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-dot-animated {
+    animation: none;
+  }
 }
 </style>

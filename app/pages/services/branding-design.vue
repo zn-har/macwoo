@@ -8,7 +8,7 @@ useSeoMeta({
   ogDescription: 'As a leading creative and strategic branding agency, Macawoo crafts powerful brand identity, strategic positioning, visual design, and market positioning that drives growth.'
 })
 
-const siteUrl = 'https://www.macawoo.co'
+const siteUrl = 'https://macawoo.co'
 useHead({
   script: [
     {
@@ -305,7 +305,7 @@ const logos = [
           >
             <div
               class="group bg-brand-teal-500 rounded-[8px] p-6 flex flex-col methodology-card h-full transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-1.5 hover:shadow-xl hover:shadow-black/25"
-              style="border: 1px solid rgba(255, 255, 255, 0.05); backdrop-filter: blur(2px); min-height: 218px;"
+              style="border: 1px solid rgba(255, 255, 255, 0.05); min-height: 218px;"
             >
               <!-- Number -->
               <p
